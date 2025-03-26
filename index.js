@@ -16,6 +16,11 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
+// Get Home API
+app.get("/", (req, res) => {
+  res.json({ message: "Welcome to the Todos API" });
+});
+
 // Get all todos
 app.get("/todos", async (req, res) => {
   const result = await pool.query("SELECT * FROM todos ORDER BY id ASC");
