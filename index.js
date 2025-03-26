@@ -22,15 +22,14 @@ const errorHandler = (err, req, res, next) => {
   res.status(500).json({ error: "Internal Server Error" });
 };
 
-// Validation function
-const validateTodo = (req, res, next) => {
+// Validation middleware for adding/updating todos
+const validateTodoText = (req, res, next) => {
   const { text } = req.body;
   if (!text || typeof text !== "string" || text.trim().length < 3) {
     return res.status(400).json({ error: "Todo text must be at least 3 characters long" });
   }
   next();
 };
-
 
 // Get Home API
 app.get("/", (req, res) => {
@@ -48,7 +47,7 @@ app.get("/todos", async (req, res, next) => {
 });
 
 // Add a new todo with validation
-app.post("/todos", validateTodo, async (req, res, next) => {
+app.post("/todos", validateTodoText, async (req, res, next) => {
   try {
     const { text } = req.body;
     const result = await pool.query(
@@ -62,19 +61,42 @@ app.post("/todos", validateTodo, async (req, res, next) => {
 });
 
 
-// Update a todo
+// Update a todo (text or completed status)
 app.put("/todos/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { completed } = req.body;
+    const { text, completed } = req.body;
 
-    if (typeof completed !== "boolean") {
-      return res.status(400).json({ error: "Completed status must be true or false" });
+    let updateFields = [];
+    let values = [];
+    let index = 1;
+
+    if (text !== undefined) {
+      if (typeof text !== "string" || text.trim().length < 3) {
+        return res.status(400).json({ error: "Todo text must be at least 3 characters long" });
+      }
+      updateFields.push(`text = $${index}`);
+      values.push(text.trim());
+      index++;
     }
 
+    if (completed !== undefined) {
+      if (typeof completed !== "boolean") {
+        return res.status(400).json({ error: "Completed status must be true or false" });
+      }
+      updateFields.push(`completed = $${index}`);
+      values.push(completed);
+      index++;
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: "No valid fields provided for update" });
+    }
+
+    values.push(id);
     const result = await pool.query(
-      "UPDATE todos SET completed = $1 WHERE id = $2 RETURNING *",
-      [completed, id]
+      `UPDATE todos SET ${updateFields.join(", ")} WHERE id = $${index} RETURNING *`,
+      values
     );
 
     if (result.rows.length === 0) {
@@ -86,6 +108,7 @@ app.put("/todos/:id", async (req, res, next) => {
     next(err);
   }
 });
+
 
 // Delete a todo
 app.delete("/todos/:id", async (req, res, next) => {
